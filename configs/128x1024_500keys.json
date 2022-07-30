@@ -1,0 +1,17 @@
+{
+  "Client": {
+    "Cluster": {
+      "Network": {
+        "Addresses": [
+          "localhost:5701"
+        ]
+      }
+    }
+  },
+  "MapName": "mymap1",
+  "KeyCount": 500,
+  "Repeat": 100,
+  "GoroutineCount": 1,
+  "EntryGenerator": "sized128x1024",
+  "Warmup": false
+}
