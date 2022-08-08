@@ -1,0 +1,11 @@
+{
+  "OperationCount": 100000,
+  "Concurrency": 100,
+  "Client": {
+    "Cluster": {
+      "Network": {
+        "Addresses": ["localhost:5701"]
+      }
+    }
+  }
+}

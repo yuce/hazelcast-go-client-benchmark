@@ -1,6 +1,6 @@
 module hazelcast-go-client-benchmark
 
-go 1.18
+go 1.17
 
 require (
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
@@ -10,4 +10,5 @@ require (
 	github.com/tklauser/go-sysconf v0.3.4 // indirect
 	github.com/tklauser/numcpus v0.2.1 // indirect
 	golang.org/x/sys v0.0.0-20210217105451-b926d437f341 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
