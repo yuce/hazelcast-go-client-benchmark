@@ -19,8 +19,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
-	"time"
 )
 
 func bye(msg string) {
@@ -37,6 +37,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	log.Printf("Operation Count: %d", config.OperationCount)
+	log.Printf("Concurrency: %d", config.Concurrency)
+	log.Printf("Mode: %v", config.Mode())
 	svc, err := StartNewService(context.Background(), config)
 	if err != nil {
 		panic(err)
@@ -44,32 +47,12 @@ func main() {
 	took := measureTime(func() {
 		for i := 0; i < config.OperationCount; i++ {
 			key := fmt.Sprintf("key-%d")
-			if err := svc.Do(context.Background(), key); err != nil {
+			if err := svc.Do(context.Background(), i, key); err != nil {
 				panic(err)
 			}
 		}
-
+		svc.Stop(context.Background())
 	})
 	// ignoring the error
 	_, _ = fmt.Fprintf(os.Stderr, "Took: %d ms for %d operations\n", took.Milliseconds(), config.OperationCount)
-}
-
-func measureTime(f func()) time.Duration {
-	tic := time.Now()
-	f()
-	toc := time.Now()
-	return toc.Sub(tic)
-}
-
-func must(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
-
-func mustValue(v interface{}, err error) interface{} {
-	if err != nil {
-		panic(err)
-	}
-	return v
 }

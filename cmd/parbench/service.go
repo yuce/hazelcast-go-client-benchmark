@@ -10,12 +10,18 @@ import (
 	"github.com/hazelcast/hazelcast-go-client"
 )
 
+type item struct {
+	i   int
+	key interface{}
+}
+
 type Service struct {
 	client *hazelcast.Client
 	m      *hazelcast.Map
 	wg     *sync.WaitGroup
-	ch     chan interface{}
+	ch     chan item
 	state  int32
+	mode   Mode
 }
 
 func StartNewService(ctx context.Context, config *Config) (*Service, error) {
@@ -27,16 +33,23 @@ func StartNewService(ctx context.Context, config *Config) (*Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("getting map: %w", err)
 	}
-	wg := &sync.WaitGroup{}
-	wg.Add(config.OperationCount)
+	mode := config.Mode()
+	var wg *sync.WaitGroup
+	var ch chan item
+	ch = make(chan item, config.Concurrency)
+	wg = &sync.WaitGroup{}
+	wg.Add(config.Concurrency)
 	svc := &Service{
 		client: client,
 		m:      m,
 		wg:     wg,
-		ch:     make(chan interface{}, config.Concurrency),
+		ch:     ch,
+		mode:   mode,
 	}
-	for i := 0; i < config.Concurrency; i++ {
-		go svc.worker()
+	if mode == pooledConcurrency {
+		for i := 0; i < config.Concurrency; i++ {
+			go svc.worker()
+		}
 	}
 	return svc, nil
 }
@@ -44,26 +57,49 @@ func StartNewService(ctx context.Context, config *Config) (*Service, error) {
 func (s *Service) Stop(ctx context.Context) error {
 	if atomic.CompareAndSwapInt32(&s.state, 0, 1) {
 		close(s.ch)
-		s.wg.Wait()
+		if s.mode == pooledConcurrency || s.mode == allConcurrent {
+			s.wg.Wait()
+		}
 		return s.client.Shutdown(ctx)
 	}
 	return nil
 }
 
-func (s *Service) Do(ctx context.Context, key interface{}) error {
+func (s *Service) Do(ctx context.Context, i int, key interface{}) error {
+	if s.mode == noConcurrency {
+		return s.do(ctx, i, key)
+	}
+	if s.mode == allConcurrent {
+		go func() {
+			if err := s.do(ctx, i, key); err != nil {
+				log.Print("ERROR: %s", err.Error())
+			}
+			s.wg.Done()
+		}()
+		return nil
+	}
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case s.ch <- key:
+	case s.ch <- item{i: i, key: key}:
 		return nil
 	}
 }
 
 func (s *Service) worker() {
-	for k := range s.ch {
-		if err := s.m.Set(context.Background(), k, "value"); err != nil {
+	for it := range s.ch {
+		if err := s.do(context.Background(), it.i, it.key); err != nil {
 			log.Print("ERROR: %s", err.Error())
 		}
 	}
 	s.wg.Done()
+}
+
+func (s *Service) do(ctx context.Context, i int, key interface{}) error {
+	var err error
+	t := measureTime(func() {
+		err = s.m.Set(ctx, key, "value")
+	})
+	fmt.Printf("%06d\t%12d\n", i, t.Nanoseconds())
+	return err
 }

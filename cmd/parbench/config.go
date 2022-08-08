@@ -10,6 +10,26 @@ import (
 	"github.com/hazelcast/hazelcast-go-client"
 )
 
+type Mode int
+
+const (
+	noConcurrency Mode = iota
+	pooledConcurrency
+	allConcurrent
+)
+
+func (m Mode) String() string {
+	switch m {
+	case noConcurrency:
+		return "no-concurrency"
+	case pooledConcurrency:
+		return "pooled-concurrency"
+	case allConcurrent:
+		return "all-concurrent"
+	}
+	return "UNKNOWN"
+}
+
 type Config struct {
 	Client         hazelcast.Config
 	OperationCount int
@@ -40,4 +60,14 @@ func LoadConfigFromPath(path string) (*Config, error) {
 		c.Concurrency = 1
 	}
 	return &c, nil
+}
+
+func (c Config) Mode() Mode {
+	var m Mode
+	if c.Concurrency == c.OperationCount {
+		m = allConcurrent
+	} else if c.Concurrency > 1 && c.OperationCount > 1 {
+		m = pooledConcurrency
+	}
+	return m
 }
