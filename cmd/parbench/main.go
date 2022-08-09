@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 )
 
 func bye(msg string) {
@@ -46,12 +47,29 @@ func main() {
 	}
 	took := measureTime(func() {
 		for i := 0; i < config.OperationCount; i++ {
-			key := fmt.Sprintf("key-%d")
-			if err := svc.Do(context.Background(), i, key); err != nil {
+			i := i
+			key := fmt.Sprintf("key-%d", i)
+			p := &EntryProcessor1{value: key}
+			tic := time.Now()
+			fut := Future{
+				i:         i,
+				processor: p,
+				key:       key,
+				f: func(v interface{}, err error) {
+					if err != nil {
+						panic(err)
+					}
+					toc := time.Now()
+					fmt.Printf("%06d\t%12d\n", i, toc.Sub(tic).Nanoseconds())
+				},
+			}
+			if err := svc.Do(context.Background(), fut); err != nil {
 				panic(err)
 			}
 		}
-		svc.Stop(context.Background())
+		if err := svc.Stop(context.Background()); err != nil {
+			panic(err)
+		}
 	})
 	// ignoring the error
 	_, _ = fmt.Fprintf(os.Stderr, "Took: %d ms for %d operations\n", took.Milliseconds(), config.OperationCount)

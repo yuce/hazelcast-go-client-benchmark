@@ -10,21 +10,25 @@ import (
 	"github.com/hazelcast/hazelcast-go-client"
 )
 
-type item struct {
-	i   int
-	key interface{}
+type Future struct {
+	i         int
+	processor interface{}
+	key       interface{}
+	//ch        chan interface{}
+	f func(res interface{}, err error)
 }
 
 type Service struct {
 	client *hazelcast.Client
 	m      *hazelcast.Map
 	wg     *sync.WaitGroup
-	ch     chan item
+	ch     chan Future
 	state  int32
 	mode   Mode
 }
 
 func StartNewService(ctx context.Context, config *Config) (*Service, error) {
+	config.Client.Serialization.SetIdentifiedDataSerializableFactories(&EntryProcessorFactory{})
 	client, err := hazelcast.StartNewClientWithConfig(ctx, config.Client)
 	if err != nil {
 		return nil, fmt.Errorf("starting Hazelcast client: %w", err)
@@ -35,8 +39,8 @@ func StartNewService(ctx context.Context, config *Config) (*Service, error) {
 	}
 	mode := config.Mode()
 	var wg *sync.WaitGroup
-	var ch chan item
-	ch = make(chan item, config.Concurrency)
+	var ch chan Future
+	ch = make(chan Future, config.Concurrency)
 	wg = &sync.WaitGroup{}
 	wg.Add(config.Concurrency)
 	svc := &Service{
@@ -65,14 +69,14 @@ func (s *Service) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (s *Service) Do(ctx context.Context, i int, key interface{}) error {
+func (s *Service) Do(ctx context.Context, it Future) error {
 	if s.mode == noConcurrency {
-		return s.do(ctx, i, key)
+		return s.do(ctx, it)
 	}
 	if s.mode == allConcurrent {
 		go func() {
-			if err := s.do(ctx, i, key); err != nil {
-				log.Print("ERROR: %s", err.Error())
+			if err := s.do(ctx, it); err != nil {
+				log.Printf("ERROR: %s", err.Error())
 			}
 			s.wg.Done()
 		}()
@@ -81,25 +85,21 @@ func (s *Service) Do(ctx context.Context, i int, key interface{}) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case s.ch <- item{i: i, key: key}:
+	case s.ch <- it:
 		return nil
 	}
 }
 
 func (s *Service) worker() {
 	for it := range s.ch {
-		if err := s.do(context.Background(), it.i, it.key); err != nil {
+		if err := s.do(context.Background(), it); err != nil {
 			log.Print("ERROR: %s", err.Error())
 		}
 	}
 	s.wg.Done()
 }
 
-func (s *Service) do(ctx context.Context, i int, key interface{}) error {
-	var err error
-	t := measureTime(func() {
-		err = s.m.Set(ctx, key, "value")
-	})
-	fmt.Printf("%06d\t%12d\n", i, t.Nanoseconds())
-	return err
+func (s *Service) do(ctx context.Context, it Future) error {
+	it.f(s.m.ExecuteOnKey(ctx, it.processor, it.key))
+	return nil
 }

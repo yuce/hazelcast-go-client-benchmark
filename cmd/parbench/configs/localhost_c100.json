@@ -1,5 +1,5 @@
 {
-  "OperationCount": 100000,
+  "OperationCount": 1000,
   "Concurrency": 100,
   "Client": {
     "Cluster": {
