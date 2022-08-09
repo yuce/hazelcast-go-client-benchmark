@@ -14,8 +14,7 @@ type Future struct {
 	i         int
 	processor interface{}
 	key       interface{}
-	//ch        chan interface{}
-	f func(res interface{}, err error)
+	f         func(res interface{}, err error)
 }
 
 type Service struct {
